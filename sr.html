@@ -86,6 +86,26 @@ td.mono{font-family:monospace;font-size:12px;}
 .clear-btn{display:inline-flex;align-items:center;gap:5px;padding:4px 13px;border-radius:999px;background:#fff;border:1.5px solid #ffb8d9;color:#c2336e;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s;}
 .clear-btn:hover{background:#ffe0f0;}
 
+/* remarks filter dropdown */
+.remarks-pill{position:relative;display:flex;align-items:center;gap:5px;background:#fff;border:1.5px solid #c4b5fd;border-radius:999px;padding:4px 12px;cursor:pointer;user-select:none;}
+.remarks-pill label{font-size:10px;color:#7c3aed;white-space:nowrap;cursor:pointer;}
+.remarks-pill .remarks-trigger{font-size:12px;color:#1a3a4a;background:transparent;border:none;outline:none;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;}
+.remarks-pill .remarks-trigger .arrow{font-size:9px;color:#7c3aed;flex-shrink:0;}
+.remarks-dropdown{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:999;background:#fff;border:1.5px solid #c4b5fd;border-radius:12px;box-shadow:0 4px 18px rgba(124,58,237,.13);min-width:200px;padding:8px 0;max-height:260px;overflow-y:auto;}
+.remarks-pill.open .remarks-dropdown{display:block;}
+.remarks-dd-header{display:flex;align-items:center;justify-content:space-between;padding:5px 12px 6px;border-bottom:1px solid #ede9fe;margin-bottom:4px;}
+.remarks-dd-header span{font-size:10px;font-weight:700;color:#7c3aed;}
+.remarks-dd-header button{font-size:10px;color:#7c3aed;background:none;border:none;cursor:pointer;padding:0;font-weight:700;}
+.remarks-dd-header button:hover{text-decoration:underline;}
+.remarks-search-wrap{padding:5px 10px 6px;border-bottom:1px solid #ede9fe;}
+.remarks-search-wrap input{width:100%;font-size:12px;border:1.5px solid #c4b5fd;border-radius:999px;padding:4px 10px;outline:none;color:#1a3a4a;background:#faf8ff;}
+.remarks-search-wrap input::placeholder{color:#c4b5fd;}
+.remarks-item{display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;transition:background .1s;}
+.remarks-item:hover{background:#f5f3ff;}
+.remarks-item input[type=checkbox]{accent-color:#7c3aed;width:13px;height:13px;flex-shrink:0;cursor:pointer;}
+.remarks-item label{font-size:12px;color:#1a3a4a;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;}
+.remarks-empty{font-size:11px;color:#c4b5fd;text-align:center;padding:10px 12px;}
+
 .empty-state{text-align:center;padding:3rem 1rem;background:#fff;border-radius:0 14px 14px 14px;border:2px solid #bde8ff;}
 .empty-deco{font-size:44px;margin-bottom:10px;}
 .empty-state p{font-size:13px;line-height:1.8;color:#4a7a8a;}
@@ -115,6 +135,23 @@ footer{text-align:center;margin-top:1rem;font-size:10px;color:#aac8d0;}
     <div class="search-pill">
       <span>🔍</span>
       <input type="text" id="search-customer" placeholder="Cari customer...">
+    </div>
+    <div class="remarks-pill" id="remarks-pill">
+      <label>💬 Remarks:</label>
+      <div class="remarks-trigger" id="remarks-trigger">
+        <span id="remarks-label">Semua</span>
+        <span class="arrow">▾</span>
+      </div>
+      <div class="remarks-dropdown" id="remarks-dropdown">
+        <div class="remarks-dd-header">
+          <span>Filter Remarks</span>
+          <button onclick="toggleAllRemarks(event)">Select All</button>
+        </div>
+        <div class="remarks-search-wrap">
+          <input type="text" id="remarks-search" placeholder="🔍 Cari remarks..." oninput="renderRemarksList()">
+        </div>
+        <div id="remarks-list"></div>
+      </div>
     </div>
     <button class="clear-btn" onclick="clearFilters()">✕ Clear Filter</button>
   </div>
@@ -152,6 +189,8 @@ var sortColOO = 'sono';
 var sortDirOO = 'asc';
 var MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
 var ON_ORDER_STATUSES = ['uncomplete','incomplete','on order','onorder','open'];
+var allRemarks = [];       // semua unique remarks values
+var selectedRemarks = null;  // null=semua, []=kosong, [...]=pilihan
 
 function getSheetRule(name) {
   var k = name.toLowerCase().replace(/[\s_]/g,'');
@@ -198,6 +237,7 @@ function parseSheetRows(ws, name){
   var colSO=findCol(norm,['sono','sono','sonumber']);
   var colBal=findCol(norm,['balance','sisa','remaining']);
   var colStat=findCol(norm,['status']);
+  var colRem=findCol(norm,['remarks','remark','keterangan','note','notes']);
   if(!colC)return[];
   return raw.map(function(r){
     var doDate=parseDate(r[colD]);
@@ -212,7 +252,8 @@ function parseSheetRows(ws, name){
       product:colP?String(r[colP]||'').trim():'',
       soNo:colSO?String(r[colSO]||'').trim():'',
       balance:parseFloat(r[colBal])||0,
-      status:status
+      status:status,
+      remarks:colRem?String(r[colRem]||'').trim():''
     };
   }).filter(function(r){
     if(!r.customer||r.customer.toUpperCase()==='CUSTOMER')return false;
@@ -253,6 +294,13 @@ function populateFilters(){
   var months=[...new Set(all.map(function(r){return r.month;}).filter(function(r){return r!==null;}))].sort(function(a,b){return a-b;});
   var ys=document.getElementById('year-filter');ys.innerHTML='<option value="">Semua</option>';years.forEach(function(y){ys.innerHTML+='<option value="'+y+'">'+y+'</option>';});
   var ms=document.getElementById('month-filter');ms.innerHTML='<option value="">Semua</option>';months.forEach(function(m){ms.innerHTML+='<option value="'+m+'">'+MONTHS[m]+'</option>';});
+  // populate remarks
+  allRemarks=[...new Set(all.map(function(r){return r.remarks;}).filter(function(v){return v!=='';}) )].sort();
+  selectedRemarks=null;
+  renderRemarksList();
+  updateRemarksLabel();
+  // show/hide pill
+  document.getElementById('remarks-pill').style.display=allRemarks.length?'':'none';
 }
 
 function renderTabs(){
@@ -296,6 +344,7 @@ function getFiltered(){
     if(m!==''&&r.month!==parseInt(m))return false;
     if(y!==''&&r.year!==parseInt(y))return false;
     if(q&&r.customer.toLowerCase().indexOf(q)<0)return false;
+    if(selectedRemarks!==null&&selectedRemarks.indexOf(r.remarks)<0)return false;
     return true;
   });
 }
@@ -470,10 +519,82 @@ document.getElementById('file-input').addEventListener('change',function(e){if(e
 document.getElementById('month-filter').addEventListener('change',render);
 document.getElementById('year-filter').addEventListener('change',render);
 document.getElementById('search-customer').addEventListener('input',render);
+
+// ── Remarks filter ────────────────────────────────────────────────
+document.getElementById('remarks-pill').style.display='none'; // hidden until file loaded
+
+document.getElementById('remarks-trigger').addEventListener('click',function(e){
+  e.stopPropagation();
+  document.getElementById('remarks-pill').classList.toggle('open');
+});
+document.addEventListener('click',function(){
+  document.getElementById('remarks-pill').classList.remove('open');
+});
+document.getElementById('remarks-dropdown').addEventListener('click',function(e){e.stopPropagation();});
+
+function isAllSelected(){ return selectedRemarks===null; }
+function isNoneSelected(){ return Array.isArray(selectedRemarks)&&selectedRemarks.length===0; }
+
+function renderRemarksList(){
+  var list=document.getElementById('remarks-list');
+  var q=(document.getElementById('remarks-search').value||'').toLowerCase().trim();
+  var visible=allRemarks.filter(function(r){return !q||r.toLowerCase().indexOf(q)>=0;});
+  var btn=document.querySelector('.remarks-dd-header button');
+  btn.textContent=isAllSelected()?'Deselect All':'Select All';
+  if(!visible.length){
+    list.innerHTML='<div class="remarks-empty">Tidak ada hasil~</div>';
+    return;
+  }
+  list.innerHTML=visible.map(function(rem){
+    var checked=isAllSelected()||(Array.isArray(selectedRemarks)&&selectedRemarks.indexOf(rem)>=0);
+    var id='rem-'+rem.replace(/\W/g,'_');
+    return '<div class="remarks-item" onclick="toggleRemark(\''+rem.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'
+      +'<input type="checkbox" id="'+id+'"'+(checked?' checked':'')+'>'
+      +'<label for="'+id+'">'+rem+'</label>'
+      +'</div>';
+  }).join('');
+}
+
+function toggleRemark(val){
+  if(isAllSelected()){
+    // dari "semua" → uncheck 1 = pilih semua kecuali ini
+    selectedRemarks=allRemarks.filter(function(r){return r!==val;});
+  } else {
+    var idx=selectedRemarks.indexOf(val);
+    if(idx>=0) selectedRemarks.splice(idx,1);
+    else selectedRemarks.push(val);
+    // kalau semua sudah dicentang lagi → kembali ke "semua"
+    if(selectedRemarks.length===allRemarks.length) selectedRemarks=null;
+  }
+  renderRemarksList();
+  updateRemarksLabel();
+  render();
+}
+
+function toggleAllRemarks(e){
+  e.stopPropagation();
+  selectedRemarks=isAllSelected()?[]:null; // toggle: semua↔tidak ada
+  renderRemarksList();
+  updateRemarksLabel();
+  render();
+}
+
+function updateRemarksLabel(){
+  var lbl=document.getElementById('remarks-label');
+  if(isAllSelected()) lbl.textContent='Semua';
+  else if(isNoneSelected()) lbl.textContent='(kosong)';
+  else if(selectedRemarks.length===1) lbl.textContent=selectedRemarks[0];
+  else lbl.textContent=selectedRemarks.length+' dipilih';
+}
+
 function clearFilters(){
   document.getElementById('month-filter').value='';
   document.getElementById('year-filter').value='';
   document.getElementById('search-customer').value='';
+  document.getElementById('remarks-search').value='';
+  selectedRemarks=null;
+  renderRemarksList();
+  updateRemarksLabel();
   render();
 }
 </script>
