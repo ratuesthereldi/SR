@@ -377,7 +377,7 @@ function buildOnOrder(data){
   return rows;
 }
 
-function fmt(n){return Math.round(n).toLocaleString('id-ID');}
+function fmt(n){return Number(n).toLocaleString('en-US',{maximumFractionDigits:3,useGrouping:false});}
 
 function toggleSort(col){if(sortCol===col){sortDir=sortDir==='desc'?'asc':'desc';}else{sortCol=col;sortDir='desc';}render();}
 function toggleSortOO(col){if(sortColOO===col){sortDirOO=sortDirOO==='desc'?'asc':'desc';}else{sortColOO=col;sortDirOO='asc';}render();}
